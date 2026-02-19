@@ -47,7 +47,6 @@ const Index = () => {
   const [loanBook, setLoanBook] = useState<Book | null>(null);
   const [historyBook, setHistoryBook] = useState<Book | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Book | null>(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [returnTarget, setReturnTarget] = useState<Book | null>(null);
   const [showImport, setShowImport] = useState(false);
 
@@ -56,21 +55,19 @@ const Index = () => {
   const prestati = total - disponibili;
 
   const handleDelete = async () => {
-    if (!deleteTarget) return;
+    const bookId = deleteTarget?.id;
+    if (!bookId) return;
+    setDeleteTarget(null); // chiudi subito il dialog
     try {
-      await deleteBook.mutateAsync(deleteTarget.id);
+      await deleteBook.mutateAsync(bookId);
       toast.success("Libro eliminato");
-    } catch {
-      toast.error("Errore nell'eliminazione");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Errore nell'eliminazione";
+      toast.error(msg);
     }
-    setDeleteTarget(null);
-    setShowDeleteConfirm(false);
   };
 
-  const handleDeleteCancel = () => {
-    setDeleteTarget(null);
-    setShowDeleteConfirm(false);
-  };
+  const handleDeleteCancel = () => setDeleteTarget(null);
 
   const handleResetFilters = () => {
     setSearch("");
@@ -291,7 +288,7 @@ const Index = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={!!deleteTarget && !showDeleteConfirm} onOpenChange={(o) => !o && handleDeleteCancel()}>
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && handleDeleteCancel()}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Eliminare questo libro?</AlertDialogTitle>
@@ -301,24 +298,13 @@ const Index = () => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Annulla</AlertDialogCancel>
-            <AlertDialogAction onClick={() => setShowDeleteConfirm(true)}>Elimina</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={!!deleteTarget && showDeleteConfirm} onOpenChange={(o) => !o && handleDeleteCancel()}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Conferma eliminazione</AlertDialogTitle>
-            <AlertDialogDescription>
-              Sei sicuro di voler eliminare definitivamente "{deleteTarget?.titolo}"? L'operazione non potrà essere annullata.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Annulla</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Conferma eliminazione
-            </AlertDialogAction>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleDelete()}
+            >
+              Elimina
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
