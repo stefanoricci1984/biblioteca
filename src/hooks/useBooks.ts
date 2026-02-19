@@ -104,8 +104,11 @@ export function useDeleteBook() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
-      const { error } = await supabase.from("books").delete().eq("id", id);
+      const { data, error } = await supabase.from("books").delete().eq("id", id).select("id");
       if (error) throw error;
+      if (!data?.length) {
+        throw new Error("Impossibile eliminare il libro. Verifica di essere autenticato.");
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["books"] }),
   });
