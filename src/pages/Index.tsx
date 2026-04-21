@@ -202,7 +202,7 @@ const Index = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-14">ID</TableHead>
+                  {/* <TableHead className="w-14">ID</TableHead> */}
                   <TableHead>Titolo</TableHead>
                   <TableHead>Autori</TableHead>
                   <TableHead>Editore</TableHead>
@@ -217,7 +217,7 @@ const Index = () => {
               <TableBody>
                 {books.map((book) => (
                   <TableRow key={book.id}>
-                    <TableCell className="font-mono text-sm tabular-nums">{book.id}</TableCell>
+                    {/* <TableCell className="font-mono text-sm tabular-nums">{book.id}</TableCell> */}
                     <TableCell className="font-medium">{book.titolo}</TableCell>
                     <TableCell>{book.autori || "-"}</TableCell>
                     <TableCell>{book.editore || "-"}</TableCell>
