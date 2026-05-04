@@ -23,7 +23,7 @@ import { ExcelImportDialog } from "@/components/ExcelImportDialog";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Upload, Search, Pencil, Trash2, BookOpen, Undo2, History, RotateCcw, LogOut } from "lucide-react";
+import { Plus, Upload, Search, Pencil, Trash2, BookOpen, Undo2, History, RotateCcw, LogOut, ChevronsLeft, ChevronsRight } from "lucide-react";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -33,6 +33,7 @@ const Index = () => {
   const [posizioneFilter, setPosizioneFilter] = useState("");
   const [categoriaFilter, setCategoriaFilter] = useState("");
   const [page, setPage] = useState(1);
+  const [pageInput, setPageInput] = useState("1");
   const { data: pageData, isLoading } = useBooks(
     page,
     search,
@@ -50,6 +51,15 @@ const Index = () => {
   }, [search, statusFilter, annoFilter, posizioneFilter, categoriaFilter]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / BOOKS_PAGE_SIZE));
+
+  useEffect(() => {
+    setPageInput(String(page));
+  }, [page]);
+
+  const goToPage = (n: number) => {
+    const clamped = Math.min(totalPages, Math.max(1, Math.round(n)));
+    setPage(clamped);
+  };
   const deleteBook = useDeleteBook();
   const returnBook = useReturnBook();
 
@@ -276,7 +286,18 @@ const Index = () => {
               <p>
                 Pagina {page} di {totalPages} · {totalCount} risultat{totalCount === 1 ? "o" : "i"}
               </p>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  disabled={page <= 1}
+                  onClick={() => goToPage(1)}
+                  title="Prima pagina"
+                >
+                  <ChevronsLeft className="h-4 w-4" />
+                  <span className="hidden sm:inline">Prima</span>
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -293,6 +314,41 @@ const Index = () => {
                 >
                   Successiva
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  disabled={page >= totalPages}
+                  onClick={() => goToPage(totalPages)}
+                  title="Ultima pagina"
+                >
+                  <span className="hidden sm:inline">Ultima</span>
+                  <ChevronsRight className="h-4 w-4" />
+                </Button>
+                <div className="flex items-center gap-2 border-l pl-3 ml-1 border-border">
+                  <span className="text-muted-foreground whitespace-nowrap">Vai a</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={totalPages}
+                    className="h-8 w-14 text-center tabular-nums px-1"
+                    value={pageInput}
+                    onChange={(e) => setPageInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const n = parseInt(pageInput, 10);
+                        if (!Number.isNaN(n)) goToPage(n);
+                        else setPageInput(String(page));
+                      }
+                    }}
+                    onBlur={() => {
+                      const n = parseInt(pageInput, 10);
+                      if (!Number.isNaN(n)) goToPage(n);
+                      else setPageInput(String(page));
+                    }}
+                  />
+                  <span className="tabular-nums text-muted-foreground">/ {totalPages}</span>
+                </div>
               </div>
             </div>
           )}
