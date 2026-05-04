@@ -1,52 +1,154 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import type { Tables, TablesInsert } from "@/integrations/supabase/types";
+import type { Database, Tables, TablesInsert } from "@/integrations/supabase/types";
+
+/** Evita `ReturnType<typeof supabase.from<"books">>`: TypeScript non accetta argomenti generici su `typeof`. */
+type BooksQueryBuilder = ReturnType<SupabaseClient<Database>["from"]>;
 
 export type Book = Tables<"books">;
 export type BookInsert = TablesInsert<"books">;
 export type LoanHistory = Tables<"loan_history">;
 
+/** PostgREST/Supabase limita di default a 1000 righe per richiesta: senza paginazione i libri oltre quel limite non compaiono. */
+export const BOOKS_PAGE_SIZE = 50;
+
+type StatusFilterArg = "disponibile" | "prestato" | undefined;
+
+function applyBookFilters(
+  query: BooksQueryBuilder,
+  search: string | undefined,
+  statusFilter: StatusFilterArg,
+  annoFilter: number | string | undefined,
+  posizioneFilter: string | undefined,
+  categoriaFilter: string | undefined
+) {
+  let q = query;
+
+  if (search) {
+    q = q.or(
+      `titolo.ilike.%${search}%,autori.ilike.%${search}%,isbn.ilike.%${search}%,editore.ilike.%${search}%`
+    );
+  }
+
+  if (statusFilter === "disponibile") {
+    q = q.eq("is_prestato", false);
+  } else if (statusFilter === "prestato") {
+    q = q.eq("is_prestato", true);
+  }
+
+  if (annoFilter !== undefined && annoFilter !== "") {
+    const anno = typeof annoFilter === "string" ? parseInt(annoFilter, 10) : annoFilter;
+    if (!isNaN(anno)) q = q.eq("anno", anno);
+  }
+
+  if (posizioneFilter?.trim()) {
+    const pos = posizioneFilter.trim().toUpperCase();
+    q = q.ilike("posizione", `%${pos}%`);
+  }
+
+  if (categoriaFilter?.trim()) {
+    q = q.ilike("categoria", `%${categoriaFilter.trim()}%`);
+  }
+
+  return q;
+}
+
+export type BooksPageResult = {
+  books: Book[];
+  totalCount: number;
+  /** Per le card riepilogo (stessi filtri di ricerca, senza contare il filtro "stato" tabella se serve lo split) */
+  stats: { totale: number; disponibili: number; prestati: number };
+};
+
 export function useBooks(
+  page: number,
   search?: string,
   statusFilter?: string,
   annoFilter?: number | string,
   posizioneFilter?: string,
-  categoriaFilter?: string
+  categoriaFilter?: string,
+  pageSize: number = BOOKS_PAGE_SIZE
 ) {
+  const status = statusFilter as StatusFilterArg;
+
   return useQuery({
-    queryKey: ["books", search, statusFilter, annoFilter, posizioneFilter, categoriaFilter],
-    queryFn: async () => {
-      let query = supabase.from("books").select("*").order("id", { ascending: true });
+    queryKey: ["books", page, pageSize, search, statusFilter, annoFilter, posizioneFilter, categoriaFilter],
+    queryFn: async (): Promise<BooksPageResult> => {
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
 
-      if (search) {
-        query = query.or(
-          `titolo.ilike.%${search}%,autori.ilike.%${search}%,isbn.ilike.%${search}%,editore.ilike.%${search}%`
-        );
-      }
+      let listQuery = applyBookFilters(
+        supabase.from("books").select("*", { count: "exact" }),
+        search,
+        status,
+        annoFilter,
+        posizioneFilter,
+        categoriaFilter
+      )
+        .order("id", { ascending: false })
+        .range(from, to);
 
-      if (statusFilter === "disponibile") {
-        query = query.eq("is_prestato", false);
-      } else if (statusFilter === "prestato") {
-        query = query.eq("is_prestato", true);
-      }
+      const [{ data, error, count }, stats] = await Promise.all([
+        listQuery,
+        (async (): Promise<BooksPageResult["stats"]> => {
+          if (status === "disponibile") {
+            const q = applyBookFilters(
+              supabase.from("books").select("*", { count: "exact", head: true }),
+              search,
+              "disponibile",
+              annoFilter,
+              posizioneFilter,
+              categoriaFilter
+            );
+            const { count: n } = await q;
+            const t = n ?? 0;
+            return { totale: t, disponibili: t, prestati: 0 };
+          }
+          if (status === "prestato") {
+            const q = applyBookFilters(
+              supabase.from("books").select("*", { count: "exact", head: true }),
+              search,
+              "prestato",
+              annoFilter,
+              posizioneFilter,
+              categoriaFilter
+            );
+            const { count: n } = await q;
+            const t = n ?? 0;
+            return { totale: t, disponibili: 0, prestati: t };
+          }
+          const [dispRes, prestRes] = await Promise.all([
+            applyBookFilters(
+              supabase.from("books").select("*", { count: "exact", head: true }),
+              search,
+              "disponibile",
+              annoFilter,
+              posizioneFilter,
+              categoriaFilter
+            ),
+            applyBookFilters(
+              supabase.from("books").select("*", { count: "exact", head: true }),
+              search,
+              "prestato",
+              annoFilter,
+              posizioneFilter,
+              categoriaFilter
+            ),
+          ]);
+          const disponibili = dispRes.count ?? 0;
+          const prestati = prestRes.count ?? 0;
+          return { totale: disponibili + prestati, disponibili, prestati };
+        })(),
+      ]);
 
-      if (annoFilter !== undefined && annoFilter !== "") {
-        const anno = typeof annoFilter === "string" ? parseInt(annoFilter, 10) : annoFilter;
-        if (!isNaN(anno)) query = query.eq("anno", anno);
-      }
-
-      if (posizioneFilter?.trim()) {
-        const pos = posizioneFilter.trim().toUpperCase();
-        query = query.ilike("posizione", `%${pos}%`);
-      }
-
-      if (categoriaFilter?.trim()) {
-        query = query.ilike("categoria", `%${categoriaFilter.trim()}%`);
-      }
-
-      const { data, error } = await query;
       if (error) throw error;
-      return data;
+
+      return {
+        books: data ?? [],
+        totalCount: count ?? 0,
+        stats,
+      };
     },
   });
 }
@@ -68,12 +170,23 @@ function normalizeIsbn(isbn: string | null | undefined): string {
 }
 
 export async function fetchExistingIsbns(): Promise<Set<string>> {
-  const { data, error } = await supabase.from("books").select("isbn");
-  if (error) throw error;
   const set = new Set<string>();
-  for (const row of data || []) {
-    const n = normalizeIsbn(row.isbn);
-    if (n) set.add(n);
+  const batch = 1000;
+  let from = 0;
+  for (;;) {
+    const { data, error } = await supabase
+      .from("books")
+      .select("isbn")
+      .order("id", { ascending: true })
+      .range(from, from + batch - 1);
+    if (error) throw error;
+    if (!data?.length) break;
+    for (const row of data) {
+      const n = normalizeIsbn(row.isbn);
+      if (n) set.add(n);
+    }
+    if (data.length < batch) break;
+    from += batch;
   }
   return set;
 }
