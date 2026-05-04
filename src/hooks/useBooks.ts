@@ -86,7 +86,7 @@ export function useBooks(
         posizioneFilter,
         categoriaFilter
       )
-        .order("id", { ascending: false })
+        .order("id", { ascending: true })
         .range(from, to);
 
       const [{ data, error, count }, stats] = await Promise.all([
