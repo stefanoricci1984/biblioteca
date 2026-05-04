@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useBooks, useDeleteBook, useReturnBook, type Book } from "@/hooks/useBooks";
+import { useState, useEffect } from "react";
+import { useBooks, useDeleteBook, useReturnBook, BOOKS_PAGE_SIZE, type Book } from "@/hooks/useBooks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -32,13 +32,24 @@ const Index = () => {
   const [annoFilter, setAnnoFilter] = useState("");
   const [posizioneFilter, setPosizioneFilter] = useState("");
   const [categoriaFilter, setCategoriaFilter] = useState("");
-  const { data: books, isLoading } = useBooks(
+  const [page, setPage] = useState(1);
+  const { data: pageData, isLoading } = useBooks(
+    page,
     search,
     statusFilter === "tutti" ? undefined : statusFilter,
     annoFilter || undefined,
     posizioneFilter || undefined,
     categoriaFilter || undefined
   );
+  const books = pageData?.books;
+  const totalCount = pageData?.totalCount ?? 0;
+  const stats = pageData?.stats ?? { totale: 0, disponibili: 0, prestati: 0 };
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, annoFilter, posizioneFilter, categoriaFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / BOOKS_PAGE_SIZE));
   const deleteBook = useDeleteBook();
   const returnBook = useReturnBook();
 
@@ -49,10 +60,6 @@ const Index = () => {
   const [deleteTarget, setDeleteTarget] = useState<Book | null>(null);
   const [returnTarget, setReturnTarget] = useState<Book | null>(null);
   const [showImport, setShowImport] = useState(false);
-
-  const total = books?.length || 0;
-  const disponibili = books?.filter((b) => !b.is_prestato).length || 0;
-  const prestati = total - disponibili;
 
   const handleDelete = async () => {
     const bookId = deleteTarget?.id;
@@ -120,19 +127,19 @@ const Index = () => {
         <div className="grid grid-cols-3 gap-4">
           <Card>
             <CardContent className="p-4 text-center">
-              <p className="text-2xl font-bold text-foreground">{total}</p>
+              <p className="text-2xl font-bold text-foreground">{stats.totale}</p>
               <p className="text-sm text-muted-foreground">Totale Libri</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4 text-center">
-              <p className="text-2xl font-bold" style={{ color: "hsl(142, 70%, 45%)" }}>{disponibili}</p>
+              <p className="text-2xl font-bold" style={{ color: "hsl(142, 70%, 45%)" }}>{stats.disponibili}</p>
               <p className="text-sm text-muted-foreground">Disponibili</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4 text-center">
-              <p className="text-2xl font-bold text-destructive">{prestati}</p>
+              <p className="text-2xl font-bold text-destructive">{stats.prestati}</p>
               <p className="text-sm text-muted-foreground">In Prestito</p>
             </CardContent>
           </Card>
@@ -198,6 +205,7 @@ const Index = () => {
             Nessun libro trovato. Aggiungi libri manualmente o importa un file Excel.
           </p>
         ) : (
+          <div className="space-y-4">
           <div className="border rounded-lg overflow-hidden">
             <Table>
               <TableHeader>
@@ -262,6 +270,32 @@ const Index = () => {
                 ))}
               </TableBody>
             </Table>
+          </div>
+          {totalPages > 1 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+              <p>
+                Pagina {page} di {totalPages} · {totalCount} risultat{totalCount === 1 ? "o" : "i"}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  Precedente
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  Successiva
+                </Button>
+              </div>
+            </div>
+          )}
           </div>
         )}
       </main>
